@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "DevChronicles",
+  "version": "1.0",
+  "description": "Track your developer research history",
+  "permissions": ["history", "storage", "identity"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "48": "icons/icon48.png"
+    }
+  },
+  "icons": {
+    "48": "icons/icon48.png"
+  },
+  "host_permissions": [
+    "http://127.0.0.1:8000/*",
+    "http://localhost:8000/*"
+  ],
+  "oauth2": {
+    "client_id": "568739586973-juimpl0uua83ilht7tnmlrfpij3e2kov.apps.googleusercontent.com",
+    "scopes": ["openid", "email", "profile"]
+  }
+}

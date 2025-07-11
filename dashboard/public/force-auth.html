@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Force Authentication</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button { margin: 5px; padding: 10px 20px; }
+    </style>
+</head>
+<body>
+    <h1>Force Authentication Transfer</h1>
+    <p>This page will try to get the token from Chrome extension and transfer it to the dashboard.</p>
+    
+    <div id="results"></div>
+    
+    <button onclick="forceTransferAuth()">Transfer Auth from Extension</button>
+    <button onclick="checkCurrentAuth()">Check Current Auth</button>
+    <button onclick="redirectToDashboard()">Go to Dashboard</button>
+    
+    <script>
+        const resultsDiv = document.getElementById('results');
+        
+        function addResult(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            resultsDiv.appendChild(div);
+        }
+        
+        async function checkCurrentAuth() {
+            addResult('Checking current authentication state...');
+            
+            // Check extension storage
+            try {
+                if (typeof chrome !== 'undefined' && chrome.storage) {
+                    const result = await new Promise((resolve) => {
+                        chrome.storage.local.get(['user_data', 'access_token'], resolve);
+                    });
+                    
+                    if (result.access_token) {
+                        addResult(`Extension has token: ${result.access_token.substring(0, 30)}...`, 'success');
+                        addResult(`Extension user: ${JSON.stringify(result.user_data)}`, 'info');
+                    } else {
+                        addResult('No token in extension storage', 'error');
+                    }
+                } else {
+                    addResult('Chrome extension API not available', 'error');
+                }
+            } catch (error) {
+                addResult(`Extension error: ${error.message}`, 'error');
+            }
+            
+            // Check localStorage
+            const localToken = localStorage.getItem('devchronicles_token');
+            const localUser = localStorage.getItem('devchronicles_user');
+            
+            if (localToken) {
+                addResult(`LocalStorage has token: ${localToken.substring(0, 30)}...`, 'success');
+            } else {
+                addResult('No token in localStorage', 'error');
+            }
+        }
+        
+        async function forceTransferAuth() {
+            addResult('Attempting to transfer authentication from extension...');
+            
+            try {
+                if (typeof chrome !== 'undefined' && chrome.storage) {
+                    const result = await new Promise((resolve) => {
+                        chrome.storage.local.get(['user_data', 'access_token'], resolve);
+                    });
+                    
+                    if (result.access_token && result.user_data) {
+                        // Store in localStorage
+                        localStorage.setItem('devchronicles_token', result.access_token);
+                        localStorage.setItem('devchronicles_user', JSON.stringify(result.user_data));
+                        
+                        addResult('Successfully transferred auth to localStorage!', 'success');
+                        addResult(`Token: ${result.access_token.substring(0, 30)}...`, 'info');
+                        addResult(`User: ${result.user_data.name || result.user_data.email}`, 'info');
+                        
+                        // Test the token
+                        await testToken(result.access_token);
+                        
+                    } else {
+                        addResult('No authentication found in extension storage', 'error');
+                    }
+                } else {
+                    addResult('Chrome extension API not available', 'error');
+                }
+            } catch (error) {
+                addResult(`Transfer failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testToken(token) {
+            addResult('Testing token with backend API...');
+            
+            try {
+                const response = await fetch('http://localhost:8000/backend-api/chrome/stats', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult('Token test successful! ✅', 'success');
+                    addResult(`API Response: ${JSON.stringify(data)}`, 'info');
+                } else {
+                    addResult(`Token test failed: ${response.status} ${response.statusText}`, 'error');
+                }
+            } catch (error) {
+                addResult(`Token test error: ${error.message}`, 'error');
+            }
+        }
+        
+        function redirectToDashboard() {
+            const token = localStorage.getItem('devchronicles_token');
+            const user = localStorage.getItem('devchronicles_user');
+            
+            if (token) {
+                addResult('Redirecting to dashboard with authentication...', 'success');
+                window.location.href = '/';
+            } else {
+                addResult('No token to transfer to dashboard', 'error');
+            }
+        }
+        
+        // Auto-check on page load
+        window.onload = function() {
+            checkCurrentAuth();
+        };
+    </script>
+</body>
+</html> 

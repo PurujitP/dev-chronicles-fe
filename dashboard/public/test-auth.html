@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auth Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button { margin: 5px; padding: 10px 20px; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Authentication Test</h1>
+    
+    <div id="results"></div>
+    
+    <button onclick="testExtensionStorage()">Test Extension Storage</button>
+    <button onclick="testLocalStorage()">Test Local Storage</button>
+    <button onclick="testUrlParams()">Test URL Params</button>
+    <button onclick="testApiCall()">Test API Call</button>
+    <button onclick="clearStorage()">Clear Storage</button>
+    
+    <script>
+        const resultsDiv = document.getElementById('results');
+        
+        function addResult(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            resultsDiv.appendChild(div);
+        }
+        
+        async function testExtensionStorage() {
+            addResult('Testing Chrome Extension Storage...');
+            
+            try {
+                if (typeof chrome !== 'undefined' && chrome.storage) {
+                    const result = await new Promise((resolve) => {
+                        chrome.storage.local.get(['user_data', 'access_token'], resolve);
+                    });
+                    
+                    if (result.access_token) {
+                        addResult(`Extension token found: ${result.access_token.substring(0, 20)}...`, 'success');
+                        addResult(`User data: ${JSON.stringify(result.user_data)}`, 'info');
+                    } else {
+                        addResult('No token found in extension storage', 'error');
+                    }
+                } else {
+                    addResult('Chrome extension API not available', 'error');
+                }
+            } catch (error) {
+                addResult(`Extension storage error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testLocalStorage() {
+            addResult('Testing Local Storage...');
+            
+            const storedToken = localStorage.getItem('devchronicles_token');
+            const storedUser = localStorage.getItem('devchronicles_user');
+            
+            if (storedToken) {
+                addResult(`Local storage token found: ${storedToken.substring(0, 20)}...`, 'success');
+                addResult(`Local storage user: ${storedUser}`, 'info');
+            } else {
+                addResult('No token found in local storage', 'error');
+            }
+        }
+        
+        async function testUrlParams() {
+            addResult('Testing URL Parameters...');
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            const tokenFromUrl = urlParams.get('token');
+            const userFromUrl = urlParams.get('user');
+            
+            if (tokenFromUrl) {
+                addResult(`URL token found: ${tokenFromUrl.substring(0, 20)}...`, 'success');
+                addResult(`URL user: ${userFromUrl}`, 'info');
+            } else {
+                addResult('No token found in URL parameters', 'error');
+            }
+        }
+        
+        async function testApiCall() {
+            addResult('Testing API Call...');
+            
+            // Get token from any source
+            let token = null;
+            
+            // Try extension storage first
+            try {
+                if (typeof chrome !== 'undefined' && chrome.storage) {
+                    const result = await new Promise((resolve) => {
+                        chrome.storage.local.get(['access_token'], resolve);
+                    });
+                    token = result.access_token;
+                }
+            } catch (error) {
+                console.error('Extension storage error:', error);
+            }
+            
+            // Try local storage
+            if (!token) {
+                token = localStorage.getItem('devchronicles_token');
+            }
+            
+            // Try URL params
+            if (!token) {
+                const urlParams = new URLSearchParams(window.location.search);
+                token = urlParams.get('token');
+            }
+            
+            if (!token) {
+                addResult('No token available for API call', 'error');
+                return;
+            }
+            
+            addResult(`Using token: ${token.substring(0, 20)}...`, 'info');
+            
+            try {
+                const response = await fetch('http://localhost:8000/backend-api/chrome/stats', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult(`API call successful: ${JSON.stringify(data)}`, 'success');
+                } else {
+                    addResult(`API call failed: ${response.status} ${response.statusText}`, 'error');
+                }
+            } catch (error) {
+                addResult(`API call error: ${error.message}`, 'error');
+            }
+        }
+        
+        function clearStorage() {
+            localStorage.removeItem('devchronicles_token');
+            localStorage.removeItem('devchronicles_user');
+            
+            if (typeof chrome !== 'undefined' && chrome.storage) {
+                chrome.storage.local.remove(['user_data', 'access_token']);
+            }
+            
+            addResult('Storage cleared', 'info');
+        }
+        
+        // Auto-test on page load
+        window.onload = function() {
+            addResult('Page loaded - running auto tests...');
+            setTimeout(testExtensionStorage, 100);
+            setTimeout(testLocalStorage, 200);
+            setTimeout(testUrlParams, 300);
+        };
+    </script>
+</body>
+</html> 

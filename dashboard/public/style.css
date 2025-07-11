@@ -1,0 +1,38 @@
+/* Add percentage indicator styles */
+.percentage {
+    font-size: 0.9em;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.percentage.positive {
+    color: #10b981;
+}
+
+.percentage.negative {
+    color: #ef4444;
+}
+
+.percentage.neutral {
+    color: #6b7280;
+}
+
+/* Update the metric change icons based on percentage type */
+.metric-change i {
+    transition: all 0.3s ease;
+}
+
+.metric-change .percentage.positive ~ i,
+.metric-change:has(.percentage.positive) i {
+    color: #10b981;
+}
+
+.metric-change .percentage.negative ~ i,
+.metric-change:has(.percentage.negative) i {
+    color: #ef4444;
+}
+
+.metric-change .percentage.neutral ~ i,
+.metric-change:has(.percentage.neutral) i {
+    color: #6b7280;
+} 

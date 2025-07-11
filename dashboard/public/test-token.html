@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token Test - DevChronicles</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 DevChronicles Token Test</h1>
+        <p>This page helps debug the authentication flow between the Chrome extension and dashboard.</p>
+        
+        <div id="results"></div>
+        
+        <button onclick="testTokenFlow()">Test Token Flow</button>
+        <button onclick="clearAll()">Clear All Data</button>
+        <button onclick="simulateExtensionCall()">Simulate Extension Call</button>
+        
+        <h2>Expected Flow:</h2>
+        <ol>
+            <li>Extension popup gets token from <code>chrome.storage.local</code></li>
+            <li>Extension opens dashboard with URL: <code>http://localhost:3000?token=XXX&user=XXX</code></li>
+            <li>Dashboard reads token from URL and stores in localStorage</li>
+            <li>Dashboard makes API calls with <code>Authorization: Bearer TOKEN</code></li>
+        </ol>
+        
+        <h2>Test Results:</h2>
+        <div id="testResults"></div>
+    </div>
+
+    <script>
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.innerHTML = message;
+            results.appendChild(div);
+        }
+
+        function testTokenFlow() {
+            document.getElementById('results').innerHTML = '';
+            addResult('🔍 Testing token flow...', 'info');
+            
+            // 1. Check URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const tokenFromUrl = urlParams.get('token') || urlParams.get('auth_token');
+            const userFromUrl = urlParams.get('user');
+            
+            if (tokenFromUrl) {
+                addResult(`✅ Token found in URL: ${tokenFromUrl.substring(0, 20)}...`, 'success');
+                
+                if (userFromUrl) {
+                    addResult(`✅ User data found in URL`, 'success');
+                    try {
+                        const userData = JSON.parse(decodeURIComponent(userFromUrl));
+                        addResult(`📋 User data: ${JSON.stringify(userData, null, 2)}`, 'info');
+                    } catch (e) {
+                        addResult(`❌ Error parsing user data: ${e.message}`, 'error');
+                    }
+                } else {
+                    addResult(`⚠️ No user data in URL`, 'warning');
+                }
+            } else {
+                addResult(`❌ No token found in URL parameters`, 'error');
+            }
+            
+            // 2. Check localStorage
+            const storedToken = localStorage.getItem('devchronicles_token');
+            const storedUser = localStorage.getItem('devchronicles_user');
+            
+            if (storedToken) {
+                addResult(`✅ Token found in localStorage: ${storedToken.substring(0, 20)}...`, 'success');
+            } else {
+                addResult(`❌ No token in localStorage`, 'error');
+            }
+            
+            if (storedUser) {
+                addResult(`✅ User data found in localStorage`, 'success');
+            } else {
+                addResult(`❌ No user data in localStorage`, 'error');
+            }
+            
+            // 3. Test API call
+            testApiCall(tokenFromUrl || storedToken);
+        }
+
+        async function testApiCall(token) {
+            if (!token) {
+                addResult(`❌ No token available for API test`, 'error');
+                return;
+            }
+            
+            try {
+                addResult(`🔄 Testing API call with token...`, 'info');
+                
+                const response = await fetch('http://localhost:8000/backend-api/chrome/stats', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult(`✅ API call successful! Status: ${response.status}`, 'success');
+                    addResult(`📊 Data received: ${JSON.stringify(data, null, 2)}`, 'info');
+                } else {
+                    addResult(`❌ API call failed! Status: ${response.status}`, 'error');
+                    const errorText = await response.text();
+                    addResult(`📋 Error: ${errorText}`, 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ API call error: ${error.message}`, 'error');
+            }
+        }
+
+        function clearAll() {
+            localStorage.removeItem('devchronicles_token');
+            localStorage.removeItem('devchronicles_user');
+            
+            // Clear URL parameters
+            window.history.replaceState({}, document.title, window.location.pathname);
+            
+            addResult(`🧹 Cleared all stored data`, 'info');
+        }
+
+        function simulateExtensionCall() {
+            // Simulate what the extension should do
+            const sampleToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.sample.token';
+            const sampleUser = {
+                name: 'Test User',
+                email: 'test@example.com'
+            };
+            
+            const encodedUser = encodeURIComponent(JSON.stringify(sampleUser));
+            const newUrl = `${window.location.origin}${window.location.pathname}?token=${sampleToken}&user=${encodedUser}`;
+            
+            addResult(`🔄 Simulating extension call...`, 'info');
+            addResult(`📋 URL that extension should create: ${newUrl}`, 'info');
+            
+            // Redirect to simulate extension behavior
+            window.location.href = newUrl;
+        }
+
+        // Run test on page load
+        window.addEventListener('load', () => {
+            testTokenFlow();
+        });
+    </script>
+</body>
+</html> 
