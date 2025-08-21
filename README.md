@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-# dev-chronicles-fe
-FrontEnd Dashboard and FrontEnd Extention Pop Up
-=======
 # DevChronicles Frontend
 
 This directory contains all frontend components for the DevChronicles application.
@@ -198,4 +194,3 @@ debugAuth.clearTokens()
 5. **Verify API integration** with backend server
 
 This reorganized structure provides a cleaner separation of concerns while keeping all frontend code in a single directory for easier management and development. 
->>>>>>> dd74cc4 (main)

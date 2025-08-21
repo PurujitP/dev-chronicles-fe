@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "DevChronicles",
-  "version": "1.0",
-  "description": "Track your developer research history",
+  "version": "2.0",
+  "description": "Track your developer research history with React-powered dashboard",
   "permissions": ["history", "storage", "identity"],
   "background": {
     "service_worker": "background.js"

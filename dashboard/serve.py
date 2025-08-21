@@ -19,9 +19,15 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_GET(self):
-        # Handle all routes by serving index.html (for SPA routing)
+        # Handle SPA routing - only redirect HTML page requests, not static assets
         parsed_path = urlparse(self.path)
-        if parsed_path.path == '/' or parsed_path.path.startswith('/dashboard'):
+        path = parsed_path.path
+        
+        # Check if it's a static file (has file extension)
+        has_extension = '.' in path.split('/')[-1]
+        
+        # Only redirect to index.html if it's not a static file
+        if not has_extension and (path == '/' or path.startswith('/dashboard')):
             self.path = '/index.html'
         
         return super().do_GET()

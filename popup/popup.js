@@ -392,7 +392,7 @@ function getCategoryLabel(category) {
 
 // Open dashboard in new tab
 function openDashboard() {
-  console.log('🚀 Opening dashboard - checking storage for auth data...');
+  console.log('🚀 Opening React dashboard - checking storage for auth data...');
   
   // Get the access token and user data to pass to dashboard
   chrome.storage.local.get(['access_token', 'user_data'], (result) => {
@@ -403,7 +403,7 @@ function openDashboard() {
       userPreview: result.user_data ? (result.user_data.email || result.user_data.name || 'Unknown') : 'None'
     });
     
-    let dashboardUrl = 'http://localhost:3000';
+    let dashboardUrl = 'http://localhost:3001/react-dashboard.html';
     
     if (result.access_token) {
       // Create user data if missing
@@ -414,7 +414,7 @@ function openDashboard() {
       
       const encodedUser = encodeURIComponent(JSON.stringify(userData));
       dashboardUrl += `?token=${result.access_token}&user=${encodedUser}`;
-      console.log('✅ Dashboard URL with auth:', dashboardUrl.replace(result.access_token, 'TOKEN_HIDDEN'));
+      console.log('✅ React Dashboard URL with auth:', dashboardUrl.replace(result.access_token, 'TOKEN_HIDDEN'));
     } else {
       console.warn('❌ No access token found in storage!');
       console.warn('Available storage keys:', Object.keys(result));
@@ -425,10 +425,10 @@ function openDashboard() {
       });
       
       // Still open dashboard but without token
-      console.log('📝 Opening dashboard without auth - user will see login prompt');
+      console.log('📝 Opening React dashboard without auth - user will see login prompt');
     }
     
-    console.log('🌐 Final dashboard URL:', dashboardUrl);
+    console.log('🌐 Final React dashboard URL:', dashboardUrl);
     
     chrome.tabs.create({ 
       url: dashboardUrl,

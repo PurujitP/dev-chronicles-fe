@@ -273,11 +273,43 @@ async function sendHistoryToBackend(token, historyItems) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`HTTP error ${response.status}: ${errorText}`);
+      
+      // Handle token expiration (401 Unauthorized)
+      if (response.status === 401) {
+        console.log('Token expired! Clearing stored tokens and stopping history collection.');
+        
+        // Clear expired tokens from storage
+        chrome.storage.local.remove(['access_token', 'refresh_token'], () => {
+          console.log('Expired tokens cleared from storage');
+        });
+        
+        // Update local state
+        accessToken = null;
+        isAuthenticated = false;
+        
+        // Stop history collection
+        if (historyCollectionInterval) {
+          clearInterval(historyCollectionInterval);
+          historyCollectionInterval = null;
+          console.log('History collection stopped due to token expiration');
+        }
+        
+        // Notify user that re-authentication is needed
+        chrome.action.setBadgeText({ text: '!' });
+        chrome.action.setBadgeBackgroundColor({ color: '#FF0000' });
+        chrome.action.setTitle({ title: 'DevChronicles - Authentication required. Click to sign in again.' });
+      }
+      
       throw new Error(`HTTP error ${response.status}`);
     }
     
     const data = await response.json();
     console.log('History sent successfully:', data);
+    
+    // Clear any error indicators on success
+    chrome.action.setBadgeText({ text: '' });
+    chrome.action.setTitle({ title: 'DevChronicles - Running' });
+    
     return data;
   } catch (error) {
     console.error('Error sending history to backend:', error);
