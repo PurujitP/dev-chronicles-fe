@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevChronicles - Refresh Token Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { color: #27ae60; }
+        .error { color: #e74c3c; }
+        .info { color: #3498db; }
+        .warning { color: #f39c12; }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover { background: #2980b9; }
+        button:disabled { background: #bdc3c7; cursor: not-allowed; }
+        .log {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+        .token-display {
+            background: #ecf0f1;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            word-break: break-all;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔑 DevChronicles Refresh Token Test</h1>
+    
+    <div class="container">
+        <h2>📋 Test Status</h2>
+        <div id="testStatus">Ready to test...</div>
+        <div id="logOutput" class="log">Welcome! Click any test button to start...</div>
+    </div>
+
+    <div class="test-section">
+        <h3>🔍 1. Check Current Auth State</h3>
+        <p>Check what tokens are currently stored and their validity</p>
+        <button onclick="checkAuthState()">Check Authentication</button>
+        <button onclick="clearAllTokens()">Clear All Tokens</button>
+    </div>
+
+    <div class="test-section">
+        <h3>🌐 2. Test Backend Connection</h3>
+        <p>Test if the backend server is responding and if refresh endpoint exists</p>
+        <button onclick="testBackendConnection()">Test Backend</button>
+        <button onclick="testRefreshEndpoint()">Test Refresh Endpoint</button>
+    </div>
+
+    <div class="test-section">
+        <h3>🔄 3. Test Refresh Flow</h3>
+        <p>Test the refresh token functionality end-to-end</p>
+        <button onclick="testRefreshFlow()">Test Refresh Flow</button>
+        <button onclick="simulateExpiredToken()">Simulate Expired Token</button>
+    </div>
+
+    <div class="test-section">
+        <h3>🚀 4. Test Extension Integration</h3>
+        <p>Test the refresh functionality from extension background script</p>
+        <button onclick="testExtensionRefresh()">Test Extension Refresh</button>
+        <button onclick="triggerHistoryCollection()">Trigger History Collection</button>
+    </div>
+
+    <div class="test-section">
+        <h3>📊 5. Test API Calls with Refresh</h3>
+        <p>Test API calls that should trigger refresh on 401</p>
+        <button onclick="testStatsAPI()">Test Stats API</button>
+        <button onclick="testActivityAPI()">Test Activity API</button>
+        <button onclick="testHistoryAPI()">Test History API</button>
+    </div>
+
+    <script>
+        let testLog = '';
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = {
+                'info': '🔵',
+                'success': '✅',
+                'error': '❌',
+                'warning': '⚠️'
+            }[type] || '🔵';
+            
+            const logMessage = `${timestamp} ${prefix} ${message}`;
+            testLog += logMessage + '\n';
+            
+            const logOutput = document.getElementById('logOutput');
+            logOutput.textContent = testLog;
+            logOutput.scrollTop = logOutput.scrollHeight;
+            
+            console.log(logMessage);
+        }
+
+        async function checkAuthState() {
+            log('=== CHECKING AUTHENTICATION STATE ===');
+            
+            try {
+                // Check Chrome extension storage
+                if (typeof chrome !== 'undefined' && chrome.storage) {
+                    log('Chrome extension API detected', 'success');
+                    const result = await new Promise((resolve) => {
+                        chrome.storage.local.get(['access_token', 'refresh_token', 'user_data'], resolve);
+                    });
+                    
+                    log(`Access token: ${result.access_token ? result.access_token.substring(0, 20) + '...' : 'None'}`);
+                    log(`Refresh token: ${result.refresh_token ? result.refresh_token.substring(0, 20) + '...' : 'None'}`);
+                    log(`User data: ${result.user_data ? JSON.stringify(result.user_data) : 'None'}`);
+                    
+                    // Test current token
+                    if (result.access_token) {
+                        await testToken(result.access_token, 'Extension Storage Token');
+                    }
+                } else {
+                    log('Chrome extension API not available', 'warning');
+                }
+                
+                // Check localStorage
+                const localToken = localStorage.getItem('devchronicles_token');
+                const localUser = localStorage.getItem('devchronicles_user');
+                log(`LocalStorage token: ${localToken ? localToken.substring(0, 20) + '...' : 'None'}`);
+                log(`LocalStorage user: ${localUser || 'None'}`);
+                
+                if (localToken && localToken !== result?.access_token) {
+                    await testToken(localToken, 'LocalStorage Token');
+                }
+                
+            } catch (error) {
+                log(`Error checking auth state: ${error.message}`, 'error');
+            }
+        }
+
+        async function testToken(token, source = 'Token') {
+            try {
+                log(`Testing ${source}...`);
+                const response = await fetch('http://localhost:8000/backend-api/chrome/test', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                log(`${source} test response: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const data = await response.text();
+                    log(`${source} is valid! Response: ${data}`);
+                    return true;
+                } else {
+                    log(`${source} is invalid or expired`);
+                    return false;
+                }
+            } catch (error) {
+                log(`${source} test error: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function testBackendConnection() {
+            log('=== TESTING BACKEND CONNECTION ===');
+            
+            // Test basic connectivity
+            try {
+                const response = await fetch('http://localhost:8000/', { method: 'GET' });
+                log(`Backend root response: ${response.status}`, 'info');
+            } catch (error) {
+                log(`Backend connection failed: ${error.message}`, 'error');
+                return;
+            }
+            
+            // Test API endpoints
+            const endpoints = [
+                '/backend-api/auth/extension-token',
+                '/backend-api/auth/refresh',
+                '/backend-api/chrome/test',
+                '/backend-api/chrome/stats',
+                '/backend-api/chrome/history'
+            ];
+            
+            for (const endpoint of endpoints) {
+                try {
+                    const response = await fetch(`http://localhost:8000${endpoint}`, { 
+                        method: 'OPTIONS' 
+                    });
+                    log(`${endpoint}: ${response.status}`, response.status < 500 ? 'success' : 'error');
+                } catch (error) {
+                    log(`${endpoint}: Error - ${error.message}`, 'error');
+                }
+            }
+        }
+
+        async function testRefreshEndpoint() {
+            log('=== TESTING REFRESH TOKEN ENDPOINT ===');
+            
+            try {
+                // Test with dummy refresh token
+                const response = await fetch('http://localhost:8000/backend-api/auth/refresh', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refresh_token: 'dummy_token_for_testing' })
+                });
+                
+                log(`Refresh endpoint response: ${response.status}`);
+                const responseText = await response.text();
+                log(`Response body: ${responseText}`);
+                
+                if (response.status === 404) {
+                    log('❌ Refresh token endpoint not implemented in backend!', 'error');
+                    log('Please implement POST /backend-api/auth/refresh in your backend', 'warning');
+                } else if (response.status === 401) {
+                    log('✅ Refresh token endpoint exists (401 = invalid token)', 'success');
+                } else if (response.status === 400) {
+                    log('✅ Refresh token endpoint exists (400 = bad request format)', 'success');
+                } else {
+                    log(`Unexpected response: ${response.status}`, 'warning');
+                }
+                
+            } catch (error) {
+                log(`Refresh endpoint test error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testRefreshFlow() {
+            log('=== TESTING REFRESH FLOW ===');
+            
+            if (typeof chrome === 'undefined' || !chrome.storage) {
+                log('Chrome extension API not available - cannot test refresh flow', 'error');
+                return;
+            }
+            
+            try {
+                const result = await new Promise((resolve) => {
+                    chrome.storage.local.get(['refresh_token'], resolve);
+                });
+                
+                if (!result.refresh_token) {
+                    log('No refresh token found in storage', 'error');
+                    log('Please authenticate first to get tokens', 'warning');
+                    return;
+                }
+                
+                log('Found refresh token, testing refresh...');
+                
+                // Test the refresh function directly
+                const response = await fetch('http://localhost:8000/backend-api/auth/refresh', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refresh_token: result.refresh_token })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log('✅ Refresh token worked! New tokens received', 'success');
+                    log(`New access token: ${data.access_token.substring(0, 20)}...`);
+                    
+                    // Store new tokens
+                    await new Promise((resolve) => {
+                        chrome.storage.local.set({
+                            access_token: data.access_token,
+                            refresh_token: data.refresh_token || result.refresh_token
+                        }, resolve);
+                    });
+                    
+                    log('New tokens stored successfully', 'success');
+                    
+                } else {
+                    const errorText = await response.text();
+                    log(`Refresh failed: ${response.status} - ${errorText}`, 'error');
+                }
+                
+            } catch (error) {
+                log(`Refresh flow test error: ${error.message}`, 'error');
+            }
+        }
+
+        async function simulateExpiredToken() {
+            log('=== SIMULATING EXPIRED TOKEN ===');
+            
+            if (typeof chrome === 'undefined' || !chrome.storage) {
+                log('Chrome extension API not available', 'error');
+                return;
+            }
+            
+            try {
+                // Store a fake expired token
+                const expiredToken = 'expired_token_' + Date.now();
+                await new Promise((resolve) => {
+                    chrome.storage.local.set({ access_token: expiredToken }, resolve);
+                });
+                
+                log('Set expired token, now testing API call...');
+                
+                // Try to make an API call that should trigger refresh
+                const response = await fetch('http://localhost:8000/backend-api/chrome/stats', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${expiredToken}`
+                    }
+                });
+                
+                log(`API call with expired token: ${response.status}`, response.status === 401 ? 'success' : 'warning');
+                
+                if (response.status === 401) {
+                    log('Perfect! API correctly rejected expired token', 'success');
+                    log('Now the extension should automatically try to refresh...', 'info');
+                } else {
+                    log('Unexpected: API accepted invalid token', 'warning');
+                }
+                
+            } catch (error) {
+                log(`Expired token simulation error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testExtensionRefresh() {
+            log('=== TESTING EXTENSION REFRESH ===');
+            
+            if (typeof chrome === 'undefined' || !chrome.runtime) {
+                log('Chrome extension runtime not available', 'error');
+                return;
+            }
+            
+            try {
+                // Send message to background script to test refresh
+                const response = await new Promise((resolve) => {
+                    chrome.runtime.sendMessage({ 
+                        action: 'getStats' 
+                    }, resolve);
+                });
+                
+                log(`Background script response: ${JSON.stringify(response)}`);
+                
+                if (response && response.success) {
+                    log('✅ Extension background script working correctly', 'success');
+                } else {
+                    log('❌ Extension background script failed or needs refresh', 'error');
+                }
+                
+            } catch (error) {
+                log(`Extension test error: ${error.message}`, 'error');
+            }
+        }
+
+        async function triggerHistoryCollection() {
+            log('=== TRIGGERING HISTORY COLLECTION ===');
+            
+            if (typeof chrome === 'undefined' || !chrome.runtime) {
+                log('Chrome extension runtime not available', 'error');
+                return;
+            }
+            
+            try {
+                // This should trigger history collection which might need token refresh
+                log('Triggering history collection...');
+                
+                // We can't directly trigger it, but we can check the current state
+                const result = await new Promise((resolve) => {
+                    chrome.storage.local.get(['DevHistoryLength'], resolve);
+                });
+                
+                log(`Current history length in storage: ${result.DevHistoryLength || 0}`);
+                log('History collection runs automatically every hour', 'info');
+                log('Check browser console (F12) for background script logs', 'info');
+                
+            } catch (error) {
+                log(`History collection test error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testStatsAPI() {
+            await testAPIWithRefresh('chrome/stats', 'Stats API');
+        }
+
+        async function testActivityAPI() {
+            await testAPIWithRefresh('chrome/recent-activity', 'Activity API');
+        }
+
+        async function testHistoryAPI() {
+            log('=== TESTING HISTORY API ===');
+            // History API requires POST with data, so we'll test differently
+            
+            if (typeof chrome === 'undefined' || !chrome.storage) {
+                log('Chrome extension API not available', 'error');
+                return;
+            }
+            
+            try {
+                const result = await new Promise((resolve) => {
+                    chrome.storage.local.get(['access_token'], resolve);
+                });
+                
+                if (!result.access_token) {
+                    log('No access token found', 'error');
+                    return;
+                }
+                
+                const response = await fetch('http://localhost:8000/backend-api/chrome/history', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${result.access_token}`
+                    },
+                    body: JSON.stringify([{
+                        link: 'https://example.com/test',
+                        title: 'Test History Item',
+                        visited_at: new Date().toISOString(),
+                        visit_count: 1
+                    }])
+                });
+                
+                log(`History API response: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                if (response.status === 401) {
+                    log('Token expired, refresh should be triggered', 'info');
+                } else if (response.ok) {
+                    log('History API working correctly', 'success');
+                }
+                
+            } catch (error) {
+                log(`History API test error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testAPIWithRefresh(endpoint, apiName) {
+            log(`=== TESTING ${apiName.toUpperCase()} ===`);
+            
+            if (typeof chrome === 'undefined' || !chrome.storage) {
+                log('Chrome extension API not available', 'error');
+                return;
+            }
+            
+            try {
+                const result = await new Promise((resolve) => {
+                    chrome.storage.local.get(['access_token'], resolve);
+                });
+                
+                if (!result.access_token) {
+                    log('No access token found', 'error');
+                    return;
+                }
+                
+                log(`Testing ${apiName} with current token...`);
+                
+                const response = await fetch(`http://localhost:8000/backend-api/${endpoint}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${result.access_token}`
+                    }
+                });
+                
+                log(`${apiName} response: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`${apiName} data received: ${JSON.stringify(data).substring(0, 100)}...`);
+                } else if (response.status === 401) {
+                    log(`${apiName} token expired - refresh should be triggered automatically`, 'info');
+                } else {
+                    const errorText = await response.text();
+                    log(`${apiName} error: ${errorText}`, 'error');
+                }
+                
+            } catch (error) {
+                log(`${apiName} test error: ${error.message}`, 'error');
+            }
+        }
+
+        function clearAllTokens() {
+            log('=== CLEARING ALL TOKENS ===');
+            
+            // Clear localStorage
+            localStorage.removeItem('devchronicles_token');
+            localStorage.removeItem('devchronicles_user');
+            log('LocalStorage tokens cleared');
+            
+            // Clear extension storage
+            if (typeof chrome !== 'undefined' && chrome.storage) {
+                chrome.storage.local.remove(['access_token', 'refresh_token', 'user_data'], () => {
+                    log('Extension storage tokens cleared');
+                });
+            }
+            
+            log('All tokens cleared successfully', 'success');
+        }
+
+        // Auto-run basic checks on page load
+        window.addEventListener('load', () => {
+            log('🚀 Refresh Token Test Page Loaded');
+            log('Click the buttons above to test different functionality');
+            log('Make sure your backend server is running first!', 'warning');
+        });
+    </script>
+</body>
+</html>

@@ -89,7 +89,55 @@ const Dashboard = () => {
     }
   }, []);
 
-  // Validate token
+  // Refresh token function
+  const refreshToken = useCallback(async () => {
+    try {
+      console.log('Attempting to refresh token...');
+      
+      // Try to get refresh token from Chrome extension storage
+      if (typeof window.chrome !== 'undefined' && window.chrome.storage) {
+        const result = await new Promise((resolve) => {
+          window.chrome.storage.local.get(['refresh_token'], resolve);
+        });
+        
+        if (result.refresh_token) {
+          const response = await fetch(`${apiBaseUrl}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: result.refresh_token })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            
+            // Store new tokens
+            await new Promise((resolve) => {
+              window.chrome.storage.local.set({
+                access_token: data.access_token,
+                refresh_token: data.refresh_token || result.refresh_token
+              }, resolve);
+            });
+            
+            setAccessToken(data.access_token);
+            localStorage.setItem('devchronicles_token', data.access_token);
+            console.log('Token refresh successful');
+            return data.access_token;
+          } else {
+            throw new Error(`Refresh failed with status ${response.status}`);
+          }
+        } else {
+          throw new Error('No refresh token available');
+        }
+      } else {
+        throw new Error('Chrome extension API not available');
+      }
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      throw error;
+    }
+  }, [apiBaseUrl, setAccessToken]);
+
+  // Validate token with refresh fallback
   const validateToken = useCallback(async () => {
     if (!accessToken) {
       console.log('No token to validate');
@@ -112,9 +160,18 @@ const Dashboard = () => {
       } else {
         console.error('Token validation failed:', response.status);
         if (response.status === 401) {
-          console.error('Token is invalid or expired');
-          setAccessToken(null);
-          localStorage.removeItem('devchronicles_token');
+          console.error('Token is invalid or expired, attempting refresh...');
+          
+          try {
+            await refreshToken();
+            console.log('Token refreshed successfully');
+            return true;
+          } catch (refreshError) {
+            console.error('Token refresh failed:', refreshError);
+            setAccessToken(null);
+            localStorage.removeItem('devchronicles_token');
+            return false;
+          }
         }
         return false;
       }
@@ -122,7 +179,7 @@ const Dashboard = () => {
       console.error('Error validating token:', error);
       return false;
     }
-  }, [accessToken, apiBaseUrl]);
+  }, [accessToken, apiBaseUrl, refreshToken, setAccessToken]);
 
   // Load stats
   const loadStats = useCallback(async () => {
@@ -332,15 +389,25 @@ const Dashboard = () => {
   useEffect(() => {
     if (!isLoading) {
       const loadDashboardData = async () => {
+        // First validate token quickly for login
         if (accessToken) {
-          await validateToken();
+          const isValid = await validateToken();
+          if (!isValid) {
+            console.log('Token validation failed');
+            return;
+          }
         }
         
-        await Promise.all([
+        // Load dashboard data non-blocking to prevent login delays
+        // These calls run in parallel but don't block the UI
+        Promise.all([
           loadStats(),
           loadRecentActivity(),
           loadCategoryData()
-        ]);
+        ]).catch(error => {
+          console.error('Error loading dashboard data:', error);
+          // Continue with sample data if API calls fail
+        });
       };
       
       loadDashboardData();
@@ -571,10 +638,10 @@ const Dashboard = () => {
               <span>DevChronicles</span>
             </div>
             <nav className="nav">
-              <a href="#" className="nav-link active">Dashboard</a>
-              <a href="#" className="nav-link">History</a>
-              <a href="#" className="nav-link">Insights</a>
-              <a href="#" className="nav-link">Settings</a>
+              <button className="nav-link active">Dashboard</button>
+              <button className="nav-link">History</button>
+              <button className="nav-link">Insights</button>
+              <button className="nav-link">Settings</button>
             </nav>
           </div>
           <div className="header-right">

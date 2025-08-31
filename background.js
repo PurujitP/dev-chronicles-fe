@@ -188,6 +188,56 @@ function authenticateWithGoogle() {
   });
 }
 
+// Refresh access token using refresh token
+async function refreshAccessToken() {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(['refresh_token'], async (result) => {
+      const refreshToken = result.refresh_token;
+      
+      if (!refreshToken) {
+        console.error('No refresh token available');
+        reject(new Error('No refresh token available'));
+        return;
+      }
+      
+      try {
+        console.log('Attempting to refresh access token...');
+        
+        const response = await fetch(`${BACKEND_URL}/backend-api/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken })
+        });
+        
+        if (!response.ok) {
+          if (response.status === 401) {
+            console.error('Refresh token is invalid or expired');
+            throw new Error('Refresh token expired');
+          }
+          throw new Error(`HTTP error ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Store new tokens
+        chrome.storage.local.set({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token || refreshToken // Use new refresh token if provided, otherwise keep the old one
+        }, function() {
+          accessToken = data.access_token;
+          isAuthenticated = true;
+          console.log('Token refresh complete, new tokens stored');
+          resolve(data.access_token);
+        });
+        
+      } catch (error) {
+        console.error('Token refresh error:', error);
+        reject(error);
+      }
+    });
+  });
+}
+
 // Function to start history collection
 function startHistoryCollection() {
   // Clear any existing interval
@@ -276,28 +326,62 @@ async function sendHistoryToBackend(token, historyItems) {
       
       // Handle token expiration (401 Unauthorized)
       if (response.status === 401) {
-        console.log('Token expired! Clearing stored tokens and stopping history collection.');
+        console.log('Token expired! Attempting to refresh...');
         
-        // Clear expired tokens from storage
-        chrome.storage.local.remove(['access_token', 'refresh_token'], () => {
-          console.log('Expired tokens cleared from storage');
-        });
-        
-        // Update local state
-        accessToken = null;
-        isAuthenticated = false;
-        
-        // Stop history collection
-        if (historyCollectionInterval) {
-          clearInterval(historyCollectionInterval);
-          historyCollectionInterval = null;
-          console.log('History collection stopped due to token expiration');
+        try {
+          // Attempt to refresh the token
+          const newAccessToken = await refreshAccessToken();
+          console.log('Token refresh successful, retrying history upload...');
+          
+          // Retry the request with the new token
+          const retryResponse = await fetch(`${BACKEND_URL}/backend-api/chrome/history`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${newAccessToken}`
+            },
+            body: JSON.stringify(formattedItems)
+          });
+          
+          if (retryResponse.ok) {
+            const retryData = await retryResponse.json();
+            console.log('History sent successfully after token refresh:', retryData);
+            
+            // Clear any error indicators on success
+            chrome.action.setBadgeText({ text: '' });
+            chrome.action.setTitle({ title: 'DevChronicles - Running' });
+            
+            return retryData;
+          } else {
+            throw new Error(`Retry failed with status ${retryResponse.status}`);
+          }
+          
+        } catch (refreshError) {
+          console.error('Token refresh failed:', refreshError);
+          
+          // If refresh fails, clear tokens and require re-authentication
+          chrome.storage.local.remove(['access_token', 'refresh_token'], () => {
+            console.log('Expired tokens cleared from storage after refresh failure');
+          });
+          
+          // Update local state
+          accessToken = null;
+          isAuthenticated = false;
+          
+          // Stop history collection
+          if (historyCollectionInterval) {
+            clearInterval(historyCollectionInterval);
+            historyCollectionInterval = null;
+            console.log('History collection stopped due to token refresh failure');
+          }
+          
+          // Notify user that re-authentication is needed
+          chrome.action.setBadgeText({ text: '!' });
+          chrome.action.setBadgeBackgroundColor({ color: '#FF0000' });
+          chrome.action.setTitle({ title: 'DevChronicles - Authentication required. Click to sign in again.' });
+          
+          throw new Error('Token refresh failed, re-authentication required');
         }
-        
-        // Notify user that re-authentication is needed
-        chrome.action.setBadgeText({ text: '!' });
-        chrome.action.setBadgeBackgroundColor({ color: '#FF0000' });
-        chrome.action.setTitle({ title: 'DevChronicles - Authentication required. Click to sign in again.' });
       }
       
       throw new Error(`HTTP error ${response.status}`);
@@ -333,7 +417,46 @@ async function getDetailedStats() {
     });
     
     if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`);
+      // Handle token expiration (401 Unauthorized)
+      if (response.status === 401) {
+        console.log('Stats API: Token expired, attempting to refresh...');
+        
+        try {
+          // Attempt to refresh the token
+          const newAccessToken = await refreshAccessToken();
+          console.log('Stats API: Token refresh successful, retrying stats request...');
+          
+          // Retry the request with the new token
+          const retryResponse = await fetch(`${BACKEND_URL}/backend-api/chrome/stats`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${newAccessToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (retryResponse.ok) {
+            const retryData = await retryResponse.json();
+            console.log('Stats API: Stats fetched successfully after token refresh');
+            
+            // Process and return formatted stats
+            return {
+              bugsFixed: retryData.bugsFixed || 0,
+              conceptsLearned: retryData.conceptsLearned || 0,
+              timeSpent: retryData.timeSpent || '0h',
+              totalEntries: retryData.totalEntries || 0
+            };
+          } else {
+            throw new Error(`Retry failed with status ${retryResponse.status}`);
+          }
+          
+        } catch (refreshError) {
+          console.error('Stats API: Token refresh failed:', refreshError);
+          throw new Error('Token refresh failed for stats API');
+        }
+      } else {
+        throw new Error(`HTTP error ${response.status}`);
+      }
     }
     
     const data = await response.json();
@@ -375,7 +498,45 @@ async function getRecentActivity() {
     });
     
     if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`);
+      // Handle token expiration (401 Unauthorized)
+      if (response.status === 401) {
+        console.log('Recent Activity API: Token expired, attempting to refresh...');
+        
+        try {
+          // Attempt to refresh the token
+          const newAccessToken = await refreshAccessToken();
+          console.log('Recent Activity API: Token refresh successful, retrying activity request...');
+          
+          // Retry the request with the new token
+          const retryResponse = await fetch(`${BACKEND_URL}/backend-api/chrome/recent-activity`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${newAccessToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (retryResponse.ok) {
+            const retryData = await retryResponse.json();
+            console.log('Recent Activity API: Activity fetched successfully after token refresh');
+            
+            // Process and return formatted activity
+            return retryData.map(item => ({
+              title: item.title,
+              category: item.main_category || 'learning',
+              domain: new URL(item.link).hostname
+            }));
+          } else {
+            throw new Error(`Retry failed with status ${retryResponse.status}`);
+          }
+          
+        } catch (refreshError) {
+          console.error('Recent Activity API: Token refresh failed:', refreshError);
+          throw new Error('Token refresh failed for recent activity API');
+        }
+      } else {
+        throw new Error(`HTTP error ${response.status}`);
+      }
     }
     
     const data = await response.json();

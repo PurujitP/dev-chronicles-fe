@@ -206,6 +206,53 @@ class Dashboard {
         }
     }
 
+    async refreshToken() {
+        try {
+            console.log('Attempting to refresh token...');
+            
+            // Try to get refresh token from Chrome extension storage
+            if (typeof chrome !== 'undefined' && chrome.storage) {
+                const result = await new Promise((resolve) => {
+                    chrome.storage.local.get(['refresh_token'], resolve);
+                });
+                
+                if (result.refresh_token) {
+                    const response = await fetch(`${this.apiBaseUrl}/auth/refresh`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ refresh_token: result.refresh_token })
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        
+                        // Store new tokens
+                        await new Promise((resolve) => {
+                            chrome.storage.local.set({
+                                access_token: data.access_token,
+                                refresh_token: data.refresh_token || result.refresh_token
+                            }, resolve);
+                        });
+                        
+                        this.accessToken = data.access_token;
+                        localStorage.setItem('devchronicles_token', data.access_token);
+                        console.log('Token refresh successful');
+                        return data.access_token;
+                    } else {
+                        throw new Error(`Refresh failed with status ${response.status}`);
+                    }
+                } else {
+                    throw new Error('No refresh token available');
+                }
+            } else {
+                throw new Error('Chrome extension API not available');
+            }
+        } catch (error) {
+            console.error('Token refresh failed:', error);
+            throw error;
+        }
+    }
+
     async validateToken() {
         if (!this.accessToken) {
             console.log('No token to validate');
@@ -228,10 +275,19 @@ class Dashboard {
             } else {
                 console.error('Token validation failed:', response.status);
                 if (response.status === 401) {
-                    console.error('Token is invalid or expired');
-                    this.accessToken = null;
-                    localStorage.removeItem('devchronicles_token');
-                    this.showLoginPrompt();
+                    console.error('Token is invalid or expired, attempting refresh...');
+                    
+                    try {
+                        await this.refreshToken();
+                        console.log('Token refreshed successfully');
+                        return true;
+                    } catch (refreshError) {
+                        console.error('Token refresh failed:', refreshError);
+                        this.accessToken = null;
+                        localStorage.removeItem('devchronicles_token');
+                        this.showLoginPrompt();
+                        return false;
+                    }
                 }
                 return false;
             }
