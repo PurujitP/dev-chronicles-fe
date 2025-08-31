@@ -12,8 +12,8 @@ const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredActivity, setFilteredActivity] = useState(null);
 
-  const apiBaseUrl = 'http://localhost:8000/backend-api';
-
+  const apiBaseUrl = process.env.REACT_APP_API_BASE_URL;
+  console.log('API Base URL:', apiBaseUrl);
   // Load user data from various sources
   const loadUserData = useCallback(async () => {
     try {
