@@ -23,8 +23,8 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
         parsed_path = urlparse(self.path)
         path = parsed_path.path
         
-        # Handle privacy policy route
-        if path == '/privacy.xyz':
+        # Handle privacy policy routes
+        if path == '.xyz/privacy' or path == '/privacy':
             self.path = '/privacy-policy.html'
             return super().do_GET()
         
