@@ -23,6 +23,11 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
         parsed_path = urlparse(self.path)
         path = parsed_path.path
         
+        # Handle privacy policy route
+        if path == '/privacy.xyz':
+            self.path = '/privacy-policy.html'
+            return super().do_GET()
+        
         # Check if it's a static file (has file extension)
         has_extension = '.' in path.split('/')[-1]
         

@@ -32,6 +32,11 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', message: 'DevChronicles React Dashboard is running' });
 });
 
+// Privacy policy route
+app.get('/privacy.xyz', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'privacy-policy.html'));
+});
+
 // Handle all other routes by serving the React app (SPA routing)
 app.get('*', (req, res) => {
     if (hasBuiltApp) {

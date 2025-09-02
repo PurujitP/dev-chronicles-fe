@@ -403,7 +403,7 @@ function openDashboard() {
       userPreview: result.user_data ? (result.user_data.email || result.user_data.name || 'Unknown') : 'None'
     });
     
-    let dashboardUrl = 'https://dashboard.devchronicles.xyz/';
+    let dashboardUrl = 'https://devchronicles.xyz/';
     
     if (result.access_token) {
       // Create user data if missing
