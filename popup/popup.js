@@ -403,7 +403,7 @@ function openDashboard() {
       userPreview: result.user_data ? (result.user_data.email || result.user_data.name || 'Unknown') : 'None'
     });
     
-    let dashboardUrl = 'http://localhost:3000/';
+    let dashboardUrl = 'https://dashboard.devchronicles.xyz/';
     
     if (result.access_token) {
       // Create user data if missing

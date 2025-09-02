@@ -1,7 +1,7 @@
 // Dashboard JavaScript
 class Dashboard {
     constructor() {
-        this.apiBaseUrl = 'http://localhost:8000/backend-api';
+        this.apiBaseUrl = 'https://api.devchronicles.xyz/backend-api';
         this.isLoading = false;
         this.userData = null;
         this.stats = null;

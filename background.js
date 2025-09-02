@@ -4,7 +4,7 @@ console.log('Minimal background script starting...');
 // Basic variables
 let accessToken = null;
 let isAuthenticated = false;
-const BACKEND_URL = 'http://127.0.0.1:8000';
+const BACKEND_URL = 'https://api.devchronicles.xyz';
 let historyCollectionInterval = null;
 
 // Function to check and restore authentication state
